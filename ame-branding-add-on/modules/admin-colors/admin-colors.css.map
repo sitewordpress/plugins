@@ -1,0 +1,7 @@
+{
+"version": 3,
+"mappings": "AAEA,2CAA4C;EAC3C,UAAU,EAAE,IAAqB;EACjC,aAAa,EAJK,IAAI;;AAOvB,sCAAuC;EACtC,UAAU,EARQ,IAAI",
+"sources": ["admin-colors.scss"],
+"names": [],
+"file": "admin-colors.css"
+}
