@@ -64,6 +64,10 @@ class ameRoleEditor extends amePersistentModule {
 	 */
 	private $cachedEditableRoles = array();
 	/**
+	 * @var string[] Overall, most specific strategy per user. [123 => 'auto', 456 => 'user-defined-list', ...]
+	 */
+	private $cachedOverallEditableRoleStrategy = array();
+	/**
 	 * @var bool Is the hook that clears the role cache already installed?
 	 */
 	private $isRoleCacheClearingHookSet = false;
@@ -1259,6 +1263,7 @@ class ameRoleEditor extends amePersistentModule {
 			$this->getAllCapabilities(array(wp_get_current_user())),
 			$this->getUserDefinedCaps(),
 			ameUtils::get($this->loadSettings(), 'editableRoles', array()),
+			$this->getEffectiveEditableRoles(),
 			$this->menuEditor
 		);
 
@@ -1668,6 +1673,12 @@ class ameRoleEditor extends amePersistentModule {
 
 		$user = wp_get_current_user();
 		//Try the cache first.
+		if (
+			isset($this->cachedOverallEditableRoleStrategy[$user->ID])
+			&& ($this->cachedOverallEditableRoleStrategy[$user->ID] === 'none')
+		) {
+			return $editableRoles;
+		}
 		if ( isset($this->cachedEditableRoles[$user->ID]) ) {
 			$result = array();
 			foreach($editableRoles as $roleId => $role) {
@@ -1693,6 +1704,7 @@ class ameRoleEditor extends amePersistentModule {
 			$userSettings = $settings[$userActorId];
 			if ($userSettings['strategy'] === 'none') {
 				//Leave the roles unchanged.
+				$this->cachedOverallEditableRoleStrategy[$user->ID] = 'none';
 				return $editableRoles;
 			} else if ($userSettings['strategy'] === 'user-defined-list') {
 				//Allow editing only those roles that are on the list.
@@ -1704,6 +1716,7 @@ class ameRoleEditor extends amePersistentModule {
 					}
 				}
 				$this->cachedEditableRoles[$user->ID] = array_fill_keys(array_keys($filteredResult), true);
+				$this->cachedOverallEditableRoleStrategy[$user->ID] = 'user-defined-list';
 				return $filteredResult;
 			}
 			//We'll only reach this line if the user's strategy setting is not valid.
@@ -1712,6 +1725,7 @@ class ameRoleEditor extends amePersistentModule {
 		}
 
 		$leaveUnchanged = true;
+		$hasAnyUserDefinedList = false;
 		$filteredResult = array();
 
 		foreach($editableRoles as $roleId => $role) {
@@ -1723,6 +1737,7 @@ class ameRoleEditor extends amePersistentModule {
 				$leaveUnchanged = $leaveUnchanged && ($strategy === 'none');
 
 				if ($strategy === 'user-defined-list') {
+					$hasAnyUserDefinedList = true;
 					if ( isset($settings[$actorId]['userDefinedList'][$roleId]) ) {
 						$filteredResult[$roleId] = $role;
 						break;
@@ -1735,14 +1750,18 @@ class ameRoleEditor extends amePersistentModule {
 					}
 
 					//Does the target role have the same or fewer capabilities as the user's role?
-					$targetCaps = $this->getEnabledRoleCapabilities($roleId, $role);
+					$targetCaps = $this->getEnabledCoreCapabilitiesForRole($roleId, $role);
 					$sameCaps = array_intersect_key(
 						$targetCaps,
-						$this->getEnabledRoleCapabilities($userRoleId)
+						$this->getEnabledCoreCapabilitiesForRole($userRoleId)
 					);
 					if (count($sameCaps) === count($targetCaps)) {
 						$filteredResult[$roleId] = $role;
 						break;
+					}
+				} else if ($strategy === 'none') {
+					if (isset($editableRoles[$roleId])) {
+						$filteredResult[$roleId] = $role;
 					}
 				}
 			}
@@ -1750,8 +1769,11 @@ class ameRoleEditor extends amePersistentModule {
 
 		//Are all of the roles set to "none" = leave unchanged?
 		if ($leaveUnchanged) {
+			$this->cachedOverallEditableRoleStrategy[$user->ID] = 'none';
 			return $editableRoles;
 		}
+
+		$this->cachedOverallEditableRoleStrategy[$user->ID] = $hasAnyUserDefinedList ? 'user-defined-list' : 'auto';
 
 		//We won't need the capability cache again unless something changes or replaces the current user mid-request.
 		//That's probably going to be rare, so we can throw away the cache to free up some RAM.
@@ -1777,7 +1799,7 @@ class ameRoleEditor extends amePersistentModule {
 	 * @param array|null $roleData
 	 * @return boolean[]
 	 */
-	private function getEnabledRoleCapabilities($roleId, $roleData = null) {
+	private function getEnabledCoreCapabilitiesForRole($roleId, $roleData = null) {
 		if (isset($this->cachedEnabledRoleCaps[$roleId])) {
 			return $this->cachedEnabledRoleCaps[$roleId];
 		}
@@ -1793,12 +1815,42 @@ class ameRoleEditor extends amePersistentModule {
 		}
 
 		$enabledCaps = array_filter($capabilities);
+
+		//Keep only core capabilities like "edit_posts" and filter out custom capabilities added by plugins or themes.
+		$enabledCaps = array_intersect_key($enabledCaps, $this->getDefaultCapabilities());
+
 		$this->cachedEnabledRoleCaps[$roleId] = $enabledCaps;
 		return $enabledCaps;
 	}
 
+	/**
+	 * Get roles that the current user can edit in the role editor. Unlike get_editable_roles(), this method should
+	 * include any special roles that do not show up in the role list when editing a user, like the forum roles
+	 * created by bbPress.
+	 *
+	 * @return array
+	 */
+	private function getEffectiveEditableRoles() {
+		$editableRoles = get_editable_roles();
+		if (empty($editableRoles) || !is_array($editableRoles)) {
+			$editableRoles = array();
+		}
+		if (function_exists('bbp_get_dynamic_roles')) {
+			$userId = get_current_user_id();
+			if (
+				!isset($this->cachedOverallEditableRoleStrategy[$userId])
+				|| ($this->cachedOverallEditableRoleStrategy[$userId] !== 'user-defined-list')
+			) {
+				$bbPressRoles = bbp_get_dynamic_roles();
+				$editableRoles = array_merge($bbPressRoles, $editableRoles);
+			}
+		}
+		return $editableRoles;
+	}
+
 	public function clearEditableRoleCache() {
 		$this->cachedEditableRoles = array();
+		$this->cachedOverallEditableRoleStrategy = array();
 		$this->cachedEnabledRoleCaps = array();
 	}
 
@@ -1852,9 +1904,40 @@ class ameRoleEditor extends amePersistentModule {
 			}
 			$editableRoles = get_editable_roles();
 
+			$strategy = 'auto';
+			if ( isset($this->cachedOverallEditableRoleStrategy[$thisUserId]) ) {
+				$strategy = $this->cachedOverallEditableRoleStrategy[$thisUserId];
+			}
+
+			//Don't apply any further restrictions if all editable role settings are set to "leave unchanged"
+			//for this user.
+			if ($strategy === 'none') {
+				return $requiredCaps;
+			}
+
+			if (function_exists('bbp_get_dynamic_roles')) {
+				$bbPressRoles = bbp_get_dynamic_roles();
+			} else {
+				$bbPressRoles = array();
+			}
+
 			$targetUser = get_user_by('id', $targetUserId);
 			$roles = (isset($targetUser->roles) && is_array($targetUser->roles)) ? $targetUser->roles : array();
 			foreach($roles as $roleId) {
+				/*
+				 * = bbPress compatibility fix =
+				 *
+				 * bbPress always removes its special roles (like "Participant") from the editable role list. As far
+				 * as I can tell, the intent is to prevent people from bypassing bbPress settings and manually giving
+				 * those roles to users.
+				 *
+				 * This should not automatically prevent administrators from editing users who have any bbPress roles.
+				 * Therefore, let's ignore bbPress roles here unless the user has custom editable role settings.
+				 */
+				if (array_key_exists($roleId, $bbPressRoles) && ($strategy !== 'user-defined-list')) {
+					continue;
+				}
+
 				if (!array_key_exists($roleId, $editableRoles)) {
 					return $accessDenied;
 				}

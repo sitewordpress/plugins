@@ -40,7 +40,6 @@ var AmeMetaBoxEditor = /** @class */ (function () {
                     }
                 }
             }
-            console.log(id, metaBoxes);
             return new AmeMetaBoxCollection(id, metaBoxes, _this);
         });
         this.screens.sort(function (a, b) {

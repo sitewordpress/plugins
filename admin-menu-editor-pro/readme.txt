@@ -3,7 +3,7 @@ Contributors: whiteshadow
 Tags: admin, dashboard, menu, security, wpmu
 Requires at least: 4.1
 Tested up to: 5.5
-Stable tag: 2.12
+Stable tag: 2.12.1
 
 Lets you directly edit the WordPress admin menu. You can re-order, hide or rename existing menus, add custom menus and more.
 
@@ -82,6 +82,9 @@ Here are some usage tips and other things that can be good to know when using th
 == Changelog ==
 
 [Get the latest version here.](http://adminmenueditor.com/updates/)
+
+= 2.12.1 (2020-08-13) =
+* Fixed a few bugs and plugin conflicts introduced in version 2.12 that could prevent certain roles from editing some or all users. This issue was related to the new "editable roles" feature. The default settings were too restrictive for some sites that use custom capabilities and the feature was not compatible with bbPress roles.
 
 = 2.12 (2020-08-10) =
 ##### Added

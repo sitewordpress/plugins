@@ -73,7 +73,6 @@ class AmeMetaBoxEditor {
 					}
 				}
 			}
-			console.log(id, metaBoxes);
 
 			return new AmeMetaBoxCollection(id, metaBoxes, this);
 		});

@@ -31,17 +31,28 @@ class ameRexSettingsValidator {
 	private $areEditableRolesModified = false;
 
 	/**
+	 * @var array List of currently editable roles. Not to be confused with editable role *settings* that control
+	 * which roles will appear on this list.
+	 */
+	private $effectiveEditableRoles;
+
+	/**
 	 * @param string $jsonString Settings submitted by the user.
 	 * @param array $allCapabilities Capabilities that exist now, before the submitted settings are applied.
 	 * @param array $userDefinedCaps
 	 * @param array $oldEditableRoleSettings
+	 * @param array $effectiveEditableRoles
 	 * @param WPMenuEditor $menuEditor
 	 */
-	public function __construct($jsonString, $allCapabilities, $userDefinedCaps, $oldEditableRoleSettings, $menuEditor) {
+	public function __construct(
+		$jsonString, $allCapabilities, $userDefinedCaps, $oldEditableRoleSettings,
+		$effectiveEditableRoles, $menuEditor
+	) {
 		$this->inputData = $jsonString;
 		$this->preExistingCapabilities = $allCapabilities;
 		$this->preExistingUserDefinedCaps = $userDefinedCaps;
 		$this->oldEditableRoleSettings = $oldEditableRoleSettings;
+		$this->effectiveEditableRoles = $effectiveEditableRoles;
 		$this->menuEditor = $menuEditor;
 	}
 
@@ -65,7 +76,6 @@ class ameRexSettingsValidator {
 			return $this->errors;
 		}
 
-		//todo: move validation code here.
 		$submittedRoles = array();
 		foreach ($data['roles'] as $tempRole) {
 			$submittedRoles[$tempRole['name']] = $tempRole;
@@ -79,10 +89,7 @@ class ameRexSettingsValidator {
 			true
 		);
 
-		$editableRoles = get_editable_roles();
-		if (empty($editableRoles) || !is_array($editableRoles)) {
-			$editableRoles = array();
-		}
+		$editableRoles = $this->effectiveEditableRoles;
 
 		//For validation purposes, we also need existing capabilities.
 		$existingCapabilities = $this->preExistingCapabilities;
