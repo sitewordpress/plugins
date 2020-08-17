@@ -3,7 +3,7 @@
 Plugin Name: WordPress Toolbar Editor
 Plugin URI: http://adminmenueditor.com/
 Description: Lets you edit the WordPress Toolbar (a.k.a. Admin Bar) - the horizontal menu at the top of your page that shows up when you're logged in. You can hide, move, rename and edit existing items, as well as create new menu items. Requires <em>Admin Menu Editor Pro</em>.
-Version: 1.3.3
+Version: 1.3.4
 Author: Janis Elsts
 Author URI: http://w-shadow.com/
 */
